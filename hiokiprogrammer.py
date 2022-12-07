@@ -14,7 +14,7 @@ def sendtohioki(ser, strMsg):
             print(e)
     else:
         if '?' in strMsg:
-            print("Query inviata")
+            print("Query ricevuta")
             ans_msg = recfromhioki(ser)
         else:
             print("Configurazione inviata")
@@ -50,7 +50,8 @@ port = 'COM5'
 baudrate = 9600
 conf_path = "conf/conf.txt"
 dest_path = "meas/meas.csv"
-freq_vect = [1000, 800, 700, 500]
+freq_vect = [1000, 800, 700, 500, 1.1]
+
 
 # CALC
 s = serial.Serial(port, baudrate=9600, timeout=0)
@@ -58,23 +59,34 @@ s = serial.Serial(port, baudrate=9600, timeout=0)
 # Lettura configurazione Hioki
 with open(conf_path) as f:
     for line in f:
-        line = line.partition('#')[0] # opzionale ?
-        command = line.strip()
-        print(command)
+        command = line.partition('#')[0] # considera solo la parte prima dell # come comando
+        #command = line.strip()
+        print("Sto inviando allo Hioki il comando: ", command)
         sendtohioki(s, command)
+        if '#' in line:
+            check = line.partition('#')[2]
+        else:
+            check = (command.partition(' ')[0] +'?')
+
+        print("invio verifica configurazione")
+        print(sendtohioki(s, check))
 
 
 meas_list = [] # contenitore delle stringhe con i risultati di misura e relativa frequenza di acquisizione
 
-for x in freq_vect:
-    command = ":FREQ "+str(x)
+
+for x in range(len(freq_vect)):
+    command = ":FREQ "+str(freq_vect[x])
     sendtohioki(s, command)
-    print("ho inviato la frequenza " + str(x))
-    sendtohioki(s, ":FREQ?") # chiedo di mostrare la frequenza impostata
+    print("ho inviato la frequenza " + str(freq_vect[x]))
+    set_freq = sendtohioki(s, ":FREQ?")     # chiedo di mostrare la frequenza impostata
+    print("Hioki ha impostato la frequenza: ", set_freq)
+    freq_vect[x] = float(set_freq)          #  sovrascrivo con il valore impostato dallo hioki
     print("avvio la misura:")
-    meas_list.append(sendtohioki(s, "READ?")+','+"{:.5E}".format(x)) # costruisco stringa con risultato di misura più frequenza
+    meas_list.append(sendtohioki(s, "READ?")+','+"{:.5E}".format(freq_vect[x])) # costruisco stringa con risultato di misura più frequenza
 
 meas_dataframe = pd.DataFrame(columns=['Data'], data=meas_list)
+#print("Stampo le frequenze impostate dallo hioki:", freq_vect)
 
 
 meas_dataframe[['R', 'X', 'V', 'F']] = meas_dataframe.Data.str.split(",", expand=True)
