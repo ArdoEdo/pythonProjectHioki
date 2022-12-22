@@ -1,25 +1,17 @@
-"""Script per la codifica in esadecimale di valori di Tensione, Corrente, Tempo di Scarica...
-per programmare il dispositivo ZKE |nome dispositivo|
+"""
+COMMUNICATION STRINGs
+Connect = FA 05 00 00 00 00 00 00 05 F8
+Stop = FA 02 00 00 00 00 00 00 02 F8
+Disconnect = FA 06 00 00 00 00 00 00 06 F8
+Start = FA xx xx xx xx xx xx xx xx F8
+Adjust = FA 07 xx xx xx xx xx xx xx F8
 
-Fasi comunicazione:
-1. Richiesta di connessione al dispositivo con Connect
-2. Risposta del dispositivo con ANS Device
-3. Passaggio stringa di start con configurazione per avviare le misure
-...
+Buttons not encoded:
+Serial monitor
+Continue
 
-
-COMMUNICATION STRING
-Connect = FA 05 00 00 00 00 00 00 05 F8                 # Connessione al dispositivo
-Stop = FA 02 00 00 00 00 00 00 02 F8                    # Stop misure
-Disconnect = FA 06 00 00 00 00 00 00 06 F8              # Disconnessione dal dispositivo
-Start = FA xx xx xx xx xx xx xx xx F8                   # lo start invia l'intera configurazione di misura
-Adjust = FA 07 xx xx xx xx xx xx xx F8                  # aggiorna la configurazione di misura con i nuovi valori inseriti
-
-Pulsanti non codificati:
-Serial monitor ??
-Continue ??
-
-ANS Device : FA 00 00 00 00 00 00 00 00 00 00 0C 00 C8 00 0F 13 D8 F8
+Typical answer message
+ANS Device : FA xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx F8
 
 """
 
@@ -31,19 +23,18 @@ from datetime import datetime, timedelta
 # Value to Hex
 def ValToHex(value):
     """
-    Converte il valore ricevuto in ingresso in stringa esadecimake
-    :param value: valore float da codificare
-    :return: stringa esadecimale
+    Conversion from double to Hex
+    :param value: value to encode
+    :return: Hex string
     """
 
     n_comb = 240
     temp = int(value*100)       # 0.01-->1
 
-    param2 = temp % n_comb  # necessario per la codifica dei primi 8 bit
-    param1 = temp // n_comb  # necessario per la codifica degli alri 8 bit
+    param2 = temp % n_comb  # to encode first 8 bit
+    param1 = temp // n_comb  # to encode the next 8 bit
 
     hexencode = '{0:02X} {1:02X}'.format(param1, param2)
-    #print("codifica esadecimale parametro:", hexencode)
 
     return hexencode
 
@@ -51,12 +42,12 @@ def ValToHex(value):
 #XOR CrC
 def crc_calc(hex_ampere_str, hex_voltage_str, hex_time_str, discharge_mode_hex):
     """
-    Calcola CRC con la XOR
-    :param hex_ampere_str: stringa esadecimale della corrente di scarica codificata
-    :param hex_voltage_str: stringa esadecimale della tensione di cutoff codificata
-    :param hex_time_str: stringa esadecimale del tempo massimo di scarica codificata
-    :param discharge_mode_hex: stringa esadecimale della modalita di scarica
-    :return: stringa contenente CRC
+    Crc calcutator with Xor method
+    :param hex_ampere_str: Hex string of current encoded
+    :param hex_voltage_str: Hex string of cutOff voltage encoded
+    :param hex_time_str: Hex string of max time encoded
+    :param discharge_mode_hex: Hex string of discarge mode
+    :return: string
     """
     n_comb = 240
 
@@ -66,7 +57,6 @@ def crc_calc(hex_ampere_str, hex_voltage_str, hex_time_str, discharge_mode_hex):
     pl = [func1(hex_ampere_str), func2(hex_ampere_str), func1(hex_voltage_str), func2(hex_voltage_str),
           func1(hex_time_str), func2(hex_time_str), discharge_mode_hex]
 
-    #print(pl)
     result = 0x0
 
     for k in range(0, len(pl)):
@@ -79,6 +69,7 @@ def crc_calc(hex_ampere_str, hex_voltage_str, hex_time_str, discharge_mode_hex):
 
     return crc
 
+
 mode = 'd-cc'
 
 # Calc
@@ -90,73 +81,69 @@ elif mode == 'd-cp':
 elif mode == 'adjust':
     dsc_type = 0x07
 
-# Stringhe di connessione
 connect = 'FA 05 00 00 00 00 00 00 05 F8'
 stop = 'FA 02 00 00 00 00 00 00 02 F8'
 disconnect = 'FA 06 00 00 00 00 00 00 06 F8'
-# conf2 = 'FA 01 00 0A 01 A1 00 00 AB F8'    # DC-CC 0.10 4.01V 0M
+
 
 def zke_conn():
     """
-    Apertura canale di comunicazione con dispositivo ZKE
-    :return: seriale
+    Open serial communication channel with ZKE
+    :return: serial
     """
-    print("\n Selezionare la porta COM tra quelle elencate su cui è collegato il dispotivo ZKE\n")
-    # ricerca della porta su cui è collegato l'EBC controller
+    print("Avaiable serial ports, select connection with Active Load (ZKE):")
     ports = serial.tools.list_ports.comports()
 
     for port, desc, hwid in sorted(ports):
-        print("{}: {} [{}]".format(port, desc, hwid))  # stampo la lista delle COM disponibili
+        print("{}: {} [{}]".format(port, desc, hwid))
 
-    print("Inserire il nome della COM: es COM# ")
+    print("Enter COM name: es COM# ")
     com_port_name = input()
 
-    # Gestione connessione
     try:
         s = serial.Serial(port='\\\\.\\' + com_port_name, baudrate=9600, parity=serial.PARITY_ODD,
                           stopbits=serial.STOPBITS_ONE,
                           bytesize=serial.EIGHTBITS, write_timeout=0, timeout=5)
     except:
-        print("impossibile creare la seriale sulla COM inserita verificare se già aperta!")
-        print("Programma terminato")
+        print("Unable to open the serial communication on the given COM, check if already open!")
+        print("Program ended")
         exit(0)
     else:
-        print("Connessione stabilita!, connesso alla porta seriale: " + com_port_name)
-        print("\nTentativo di connessione con il dispositivo")
+        print("Connection established! Connected to the serial port: " + com_port_name)
+        print("\nConnecting with the device")
 
         s.write(bytes.fromhex(connect))
         return s
 
 
-def new_conf(s, dsc_curr, min_volt, dsc_time):  # Invio nuova configurazione al dispositivo ZKE
+def new_conf(s, dsc_curr, min_volt, dsc_time):
       """
-      Calcolo e avvio nuova scarica con la configurazione dei valori passata come parametro
-      :param s: connessione seriale
-      :param dsc_curr: valore corrente di scarica
-      :param min_volt: valore tensione di cut off
-      :param dsc_time: valore tempo di scarica
+      Calculate and send new configuration to the Load (ZKE)
+      :param s: serial
+      :param dsc_curr: current value
+      :param min_volt: cutOff value
+      :param dsc_time: discharge time value
       :return: None
       """
       try:
         t_ref = datetime.now()
         t_delta = timedelta(minutes=dsc_time)
-        print("Ora inizio della scarica", t_ref)
+        print("Discharge start time", t_ref)
         t_sim = t_ref + t_delta
-        print("Ora ipotetica fine della scarica", t_sim)
+        print("Expected end time of discharge", t_sim)
         s.write(bytes.fromhex(connect))
-        #tm.sleep(5)
-        print("Connesso, Il dispositivo risponde: ", bytes.hex(s.read(19), ' '))
-        print("Valore di corrente di scarica:")
+        print("Connected, the device reply: ", bytes.hex(s.read(19), ' '))
+        print("Discharge current value:")
         test_val = dsc_curr  # Valore di corrente di scarica
         print(test_val)
-        print("Valore di tensione minima:")
+        print("Minimum voltage value:")
         cutoff_volt = min_volt
         print(cutoff_volt)
-        print("Valore tempo massimo di scarica:")
-        max_time = dsc_time  # Minuti di scarica, solo valori interi!
+        print("Maximum discharge time value:")
+        max_time = dsc_time
         print(max_time)
 
-        # codifico i valori
+        # encode
 
         hex_ampere_val = ValToHex(test_val)
         hex_voltage_val = ValToHex(cutoff_volt)
@@ -164,8 +151,8 @@ def new_conf(s, dsc_curr, min_volt, dsc_time):  # Invio nuova configurazione al 
         dsc_type = 0x01
         crc = crc_calc(hex_ampere_val, hex_voltage_val, hex_time_val, dsc_type)
 
-        # Costruisco il messaggio
-        # formato--> "FA dsc_type ampere volt time crc F8"
+        # Build the message
+        # format--> "FA dsc_type ampere volt time crc F8"
         stx = 'FA'
         etx = 'F8'
         crc_out = crc
@@ -175,102 +162,99 @@ def new_conf(s, dsc_curr, min_volt, dsc_time):  # Invio nuova configurazione al 
         dsc_type = '{:02X}'.format(dsc_type)
 
         msg_tosend = stx + ' ' + dsc_type + ' ' + ampere + ' ' + volt + ' ' + time + ' ' + crc + ' ' + etx
-        print("Stampo messaggio da inviare codificato ", msg_tosend)
+        print("Print encoded message to send ", msg_tosend)
         s.write(bytes.fromhex(stop))
         s.write(bytes.fromhex(msg_tosend))
-        print("configurazione inviata al dispositivo, avvio scarica ... ")
+        print("configuration sent to the device, discharge startup ... ")
         tm.sleep(1)
         s.flushInput()
-        print("Scarica in corso, Il dispositivo risponde:", bytes.hex(s.read(19), ' '))
+        print("discharge in progress, the device reply:", bytes.hex(s.read(19), ' '))
         s.flushInput()
         ans_string = bytes.hex(s.read(19), ' ')
-        counter = 0 #contatore check per verifica della corrente nulla
+        counter = 0
 
-# ans_string.find("00 00", 6, 11) == -1:
         while t_sim >= datetime.now():
-            if ans_string.find("fa 00 00 00") != -1 and counter < 3:  # la corrente va a 0 prima del tempo
+            if ans_string.find("fa 00 00 00") != -1 and counter < 3:  # current go to 0 before estimated time
                 s.flushInput()  # svuoto il buffer
                 ans_string = bytes.hex(s.read(19), ' ')
                 print(ans_string)
                 counter += 1
-            elif ans_string.find("fa 00 00 00") == -1:     # la corrente è diversa da 0 quindi la scarica è in corso
-                s.flushInput() # svuoto il buffer
+            elif ans_string.find("fa 00 00 00") == -1:     # current differs from zero, discharge in progress
+                s.flushInput()
                 ans_string = bytes.hex(s.read(19), ' ')
                 print(ans_string)
             else:
                 s.flushInput() #svuoto il buffer
-                print("la scarica è terminata inaspettatamente prima del tempo di scarica previsto,"
-                      "tempo previsto per la fine della scarica e tempo corrente:", t_sim, t_ref)
+                print("the discharge ended unexpectedly before the expected discharge time, expected time and current time:", t_sim, t_ref)
                 break
-
 
         # check azzeramento corrente di scarica
         iter = 0
         while iter <= 3:
-            s.flushInput()  # svuoto il buffer
+            s.flushInput()
             ans_string = bytes.hex(s.read(19), ' ')
             print(ans_string)
             if ans_string.find("fa 00 00 00") != -1:
-                print("Scarica completata")
+                print("Discharge ended")
                 break
             else:
-                print("E' stata rilevata una corrente di scarica dicversa da zero")
+                print("Non-zero discharge current detected")
                 iter += 1
-                print("Continuo la verifica ")
+                print("Repeat Check ")
 
         if iter == 3:
-            print("Invio messaggio di stop al carico")
+            print("Sending stop message to the load")
             s.write(bytes.fromhex(stop))
 
 
       except:
-            print("Errore nell invio della configurazione, ripetere connessione al dispositivo")
+            print("Error while sending configuration, repeat connection to device")
 
 
-def stop_meas(s): # Stop misura in corso
+def stop_meas(s):
     """
-    Stop misura in corso
-    :param s: connessione seriale
+    Stop ongoing measure
+    :param s: serial
     :return: None
     """
     try:
-        print("Stop della misura in corso")
+        print("Stop ongoing measure")
         s.write(bytes.fromhex(stop))
 
     except:
-        print("Errore nell invio della configurazione di stop, ripetere connessione al dispositivo")
+        print("Error while sending stop configuration, repeat connection to device")
 
     else:
-        print('Misura stoppata')
+        print('Stopped measure')
 
 
 def disconnectserial_zke(s): # disconnessione dal dispositivo #[Chiusura seriale di comunicazione]
     """
-    Disconnessione dal dispositivo chiudendo la seriale
-    :param s: connessione seriale
+    Close serial communication
+    :param s: serial
     :return: None
     """
     try:
-        print("Disconnessione dal dispositivo [chiusura seriale]")
+        print("Disconnecting from device [serial closing]")
         s.close()
     except:
-        print("Errore nella chiusura della seriale, verificare sia aperta")
+        print("Error in closing serial, check if it is open")
 
 
 def disconnectserial_andstop(s):
     """
-    Arresto della misura e disconnessione seriale dal dispositivo
-    :param s: connessione seriale
+    Stop measurement and close serial communication
+    :param s: seriale
     :return: None
     """
     try:
-        print("Disconnessione dal dispositivo [chiusura seriale e stop misure]")
+        print("Disconnecting from device [serial closing and measure stop]")
         s.write(bytes.fromhex(stop))
         tm.sleep(1)  # obbligatorio per intercettare entrambi i messaggi
         s.write(bytes.fromhex(disconnect))
         s.close()
     except:
-        print("Errore nell'invio della configurazione di disconnect, verificare apertura seriale")
+        print("Error while sending disconnect configuration, check if serial communication is open")
 
 
 

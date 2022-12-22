@@ -1,6 +1,6 @@
 def recfromrelay(r_conn):
     """
-    Restituisce il messaggio a schermo e 1 se in errore o 0 con esito positivo
+    Returns the on-screen message and 1 if in error or 0 with positive result
     :param r_conn: serial
     :return: double
     """
@@ -15,7 +15,7 @@ def recfromrelay(r_conn):
                 else:
                     msgfromRelay = msgfromRelay + rcv
     except Exception as e:
-        print("Errore in ricezione")
+        print("error on communication channel")
         print(e)
         return 1
     else:
@@ -25,7 +25,7 @@ def recfromrelay(r_conn):
 
 def check_relay (r_conn, msg):
     """
-    Verifica la presa di configurazione del relay
+    Verify that the relay has taken the configuration
     :param r_conn: serial
     :param msg: string
     :return: None
